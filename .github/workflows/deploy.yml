@@ -1,0 +1,82 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/lms_test
+          JWT_SECRET: ci_test_jwt_secret_16
+
+      - name: Build
+        run: npm run build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync release to server
+        run: |
+          APP=/home/ubuntu/apps/lms-backend
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p $APP/current"
+          rsync -az --delete \
+            --exclude node_modules \
+            --exclude .env \
+            --exclude uploads \
+            ./dist ./package.json ./package-lock.json \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:$APP/current/"
+
+      - name: Install deps and reload PM2
+        run: |
+          APP=/home/ubuntu/apps/lms-backend
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "set -e
+            cd $APP/current
+            ln -sfn $APP/shared/.env .env
+            npm ci --omit=dev
+            if pm2 describe lms-api >/dev/null 2>&1; then
+              pm2 reload lms-api --update-env
+            else
+              pm2 start dist/server.js --name lms-api --cwd $APP/current
+            fi
+            pm2 save
+            sleep 2
+            curl -sf http://127.0.0.1:4000/api/v1/health
+          "
