@@ -53,12 +53,20 @@ Password for all: `Password123!`
 | collection | `collection@lms.local` |
 | borrower | `borrower@lms.local` |
 
-## Auth API (Phase 2)
+## Implemented APIs
 
-- `POST /api/v1/auth/register` — borrower only
-- `POST /api/v1/auth/login`
-- `GET /api/v1/auth/me` — Bearer JWT
-- `POST /api/v1/ops/admin/users` — admin creates any role (`email`, `password`, `fullName`, `role`)
+**Auth**
+- `POST /auth/register` · `POST /auth/login` · `GET /auth/me`
+- `POST /ops/admin/users` — admin creates any role
+
+**Borrower**
+- `PUT /borrowers/me/profile` — personal details + BRE
+- `POST /borrowers/me/bre/check` — dry-run BRE
+- `POST /borrowers/me/salary-slip` · `GET /borrowers/me/salary-slip/latest`
+- `GET /salary-slips/:id/download`
+- `POST /loans/preview` · `POST /loans/apply` · `GET /loans/me` · `GET /loans/me/:loanId`
+
+**Salary-slip storage:** `STORAGE_DRIVER=local` (default disk) or `oci` (Oracle Object Storage). See `.env.example`.
 
 Full contract: [`docs/05-api-design.md`](./docs/05-api-design.md).
 

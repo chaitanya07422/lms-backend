@@ -10,3 +10,6 @@ process.env.JWT_EXPIRES_IN ??= '8h';
 process.env.BCRYPT_SALT_ROUNDS ??= '10';
 process.env.AUTH_RATE_LIMIT_WINDOW_MS ??= '900000';
 process.env.AUTH_RATE_LIMIT_MAX ??= '1000';
+process.env.STORAGE_DRIVER ??= 'local';
+process.env.UPLOADS_DIR ??= './uploads-test';
+process.env.MAX_UPLOAD_BYTES ??= '5242880';
