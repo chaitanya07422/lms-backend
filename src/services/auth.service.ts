@@ -5,6 +5,7 @@ import { User, type UserDocument } from '../models/User';
 import type { UserRole } from '../types/roles';
 import { AppError } from '../utils/AppError';
 import { signAccessToken } from '../utils/jwt';
+import { isDuplicateKeyError } from '../utils/mongoErrors';
 import type { LoginBody, RegisterBody } from '../validators/auth.validators';
 
 export interface PublicUser {
@@ -22,15 +23,6 @@ export interface PublicUser {
 export interface AuthResult {
   user: PublicUser;
   token: string;
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: number }).code === 11000
-  );
 }
 
 export function toPublicUser(user: UserDocument): PublicUser {

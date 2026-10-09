@@ -13,7 +13,9 @@ const app = createApp();
 describe('auth', () => {
   beforeAll(async () => {
     await connectDatabase();
+    await User.init();
   });
+
 
   beforeEach(async () => {
     await User.deleteMany({});

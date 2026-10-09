@@ -58,6 +58,7 @@ Password for all: `Password123!`
 - `POST /api/v1/auth/register` — borrower only
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me` — Bearer JWT
+- `POST /api/v1/ops/admin/users` — admin creates any role (`email`, `password`, `fullName`, `role`)
 
 Full contract: [`docs/05-api-design.md`](./docs/05-api-design.md).
 
