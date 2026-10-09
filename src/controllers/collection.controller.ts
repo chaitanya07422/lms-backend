@@ -1,0 +1,49 @@
+import type { Request, Response } from 'express';
+
+import * as collectionService from '../services/collection.service';
+import { AppError } from '../utils/AppError';
+import { sendSuccess } from '../utils/response';
+import type { RecordPaymentBody } from '../validators/ops.validators';
+
+function requireUserId(req: Request): string {
+  if (!req.user) {
+    throw AppError.unauthorized();
+  }
+  return req.user.id;
+}
+
+export async function listLoans(_req: Request, res: Response): Promise<void> {
+  const items = await collectionService.listDisbursedLoans();
+  sendSuccess(res, { items });
+}
+
+export async function getLoan(req: Request, res: Response): Promise<void> {
+  const loanId = req.params.loanId;
+  if (!loanId) {
+    throw AppError.validation('loanId is required');
+  }
+  const detail = await collectionService.getCollectionLoanDetail(loanId);
+  sendSuccess(res, detail);
+}
+
+export async function listPayments(req: Request, res: Response): Promise<void> {
+  const loanId = req.params.loanId;
+  if (!loanId) {
+    throw AppError.validation('loanId is required');
+  }
+  const items = await collectionService.listPayments(loanId);
+  sendSuccess(res, { items });
+}
+
+export async function recordPayment(req: Request, res: Response): Promise<void> {
+  const loanId = req.params.loanId;
+  if (!loanId) {
+    throw AppError.validation('loanId is required');
+  }
+  const result = await collectionService.recordPayment(
+    loanId,
+    requireUserId(req),
+    req.body as RecordPaymentBody,
+  );
+  sendSuccess(res, result, 201);
+}

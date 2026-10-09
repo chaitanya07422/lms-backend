@@ -31,7 +31,7 @@ export interface LoanDto {
   updatedAt: string;
 }
 
-function toLoanDto(loan: LoanDocument): LoanDto {
+export function toLoanDto(loan: LoanDocument): LoanDto {
   const dto: LoanDto = {
     id: String(loan._id),
     borrowerId: String(loan.borrowerId),
