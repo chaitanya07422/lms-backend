@@ -1,8 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
-import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
+import { logger } from '../utils/logger';
 import { sendError } from '../utils/response';
 
 export function notFoundHandler(_req: Request, _res: Response, next: NextFunction): void {
@@ -11,11 +11,19 @@ export function notFoundHandler(_req: Request, _res: Response, next: NextFunctio
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ): void {
   if (err instanceof AppError) {
+    if (err.statusCode >= 500) {
+      logger.error('app_error', {
+        code: err.code,
+        message: err.message,
+        path: req.originalUrl.split('?')[0],
+        method: req.method,
+      });
+    }
     sendError(res, err.statusCode, err.code, err.message, err.details);
     return;
   }
@@ -29,9 +37,12 @@ export function errorHandler(
     return;
   }
 
-  if (env.NODE_ENV !== 'production') {
-    console.error(err);
-  }
+  logger.error('unhandled_error', {
+    message: err instanceof Error ? err.message : 'Unknown error',
+    stack: err instanceof Error ? err.stack : undefined,
+    path: req.originalUrl.split('?')[0],
+    method: req.method,
+  });
 
   sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
 }

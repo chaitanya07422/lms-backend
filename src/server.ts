@@ -1,6 +1,7 @@
 import { createApp } from './app';
 import { connectDatabase } from './config/db';
 import { env } from './config/env';
+import { logger } from './utils/logger';
 
 async function bootstrap(): Promise<void> {
   await connectDatabase();
@@ -8,11 +9,14 @@ async function bootstrap(): Promise<void> {
   const app = createApp();
 
   app.listen(env.PORT, () => {
-    console.log(`lms-backend listening on port ${env.PORT} [${env.NODE_ENV}]`);
+    logger.info('server_started', { port: env.PORT, env: env.NODE_ENV });
   });
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('Failed to start server', error);
+  logger.error('server_start_failed', {
+    message: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined,
+  });
   process.exit(1);
 });

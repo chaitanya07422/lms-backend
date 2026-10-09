@@ -4,6 +4,7 @@ import helmet from 'helmet';
 
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
 import { apiRouter } from './routes';
 
 export function createApp(): express.Application {
@@ -16,6 +17,7 @@ export function createApp(): express.Application {
   app.use(helmet());
   app.use(cors({ origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()) }));
   app.use(express.json({ limit: '1mb' }));
+  app.use(requestLogger);
 
   app.use('/api/v1', apiRouter);
 
