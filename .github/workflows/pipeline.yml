@@ -1,12 +1,13 @@
-name: Deploy
+name: Pipeline
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
 
     services:
@@ -46,6 +47,34 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install production dependencies
+        run: |
+          rm -rf node_modules
+          npm ci --omit=dev
+
+      - name: Upload release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            dist
+            node_modules
+            package.json
+            package-lock.json
+          retention-days: 1
+
+  deploy:
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -58,19 +87,17 @@ jobs:
           APP=/home/ubuntu/apps/lms-backend
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p $APP/current"
           rsync -az --delete \
-            --exclude node_modules \
             --exclude .env \
             --exclude uploads \
-            ./dist ./package.json ./package-lock.json \
+            ./release/dist ./release/node_modules ./release/package.json ./release/package-lock.json \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:$APP/current/"
 
-      - name: Install deps and reload PM2
+      - name: Reload PM2
         run: |
           APP=/home/ubuntu/apps/lms-backend
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "set -e
             cd $APP/current
             ln -sfn $APP/shared/.env .env
-            npm ci --omit=dev
             if pm2 describe lms-api >/dev/null 2>&1; then
               pm2 reload lms-api --update-env
             else
@@ -83,7 +110,7 @@ jobs:
               fi
               sleep 2
             done
-            echo "Health check failed"
+            echo 'Health check failed'
             pm2 logs lms-api --lines 50 --nostream
             exit 1
           "
