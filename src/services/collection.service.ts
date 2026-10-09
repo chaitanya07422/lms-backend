@@ -1,0 +1,128 @@
+import { Types } from 'mongoose';
+
+import { Loan } from '../models/Loan';
+import { Payment, type PaymentDocument } from '../models/Payment';
+import { User } from '../models/User';
+import { AppError } from '../utils/AppError';
+import { isDuplicateKeyError } from '../utils/mongoErrors';
+import { outstandingPaise } from '../utils/money';
+import type { RecordPaymentBody } from '../validators/ops.validators';
+import { toLoanDto, type LoanDto } from './loan.service';
+
+export interface PaymentDto {
+  id: string;
+  loanId: string;
+  utr: string;
+  amountPaise: number;
+  paidAt: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+function toPaymentDto(payment: PaymentDocument): PaymentDto {
+  return {
+    id: String(payment._id),
+    loanId: String(payment.loanId),
+    utr: payment.utr,
+    amountPaise: payment.amountPaise,
+    paidAt: payment.paidAt.toISOString(),
+    recordedBy: String(payment.recordedBy),
+    createdAt: (payment.createdAt ?? new Date()).toISOString(),
+  };
+}
+
+export async function listDisbursedLoans(): Promise<
+  Array<LoanDto & { borrowerName: string; borrowerEmail: string }>
+> {
+  const loans = await Loan.find({ status: 'DISBURSED' }).sort({ disbursedAt: -1 });
+  const borrowers = await User.find({
+    _id: { $in: loans.map((loan) => loan.borrowerId) },
+  });
+  const byId = new Map(borrowers.map((b) => [String(b._id), b]));
+
+  return loans.map((loan) => {
+    const borrower = byId.get(String(loan.borrowerId));
+    return {
+      ...toLoanDto(loan),
+      borrowerName: borrower?.fullName ?? 'Unknown',
+      borrowerEmail: borrower?.email ?? '',
+    };
+  });
+}
+
+export async function getCollectionLoanDetail(loanId: string): Promise<{
+  loan: LoanDto;
+  payments: PaymentDto[];
+}> {
+  const loan = await Loan.findById(loanId);
+  if (!loan || (loan.status !== 'DISBURSED' && loan.status !== 'CLOSED')) {
+    throw AppError.notFound('Collection loan not found');
+  }
+
+  const payments = await Payment.find({ loanId }).sort({ paidAt: -1 });
+  return {
+    loan: toLoanDto(loan),
+    payments: payments.map(toPaymentDto),
+  };
+}
+
+export async function listPayments(loanId: string): Promise<PaymentDto[]> {
+  const loan = await Loan.findById(loanId);
+  if (!loan || (loan.status !== 'DISBURSED' && loan.status !== 'CLOSED')) {
+    throw AppError.notFound('Collection loan not found');
+  }
+
+  const payments = await Payment.find({ loanId }).sort({ paidAt: -1 });
+  return payments.map(toPaymentDto);
+}
+
+export async function recordPayment(
+  loanId: string,
+  actorId: string,
+  body: RecordPaymentBody,
+): Promise<{ payment: PaymentDto; loan: LoanDto }> {
+  const loan = await Loan.findById(loanId);
+  if (!loan) {
+    throw AppError.notFound('Loan not found');
+  }
+  if (loan.status !== 'DISBURSED') {
+    throw AppError.conflict(`Cannot record payment for loan in status ${loan.status}`);
+  }
+
+  const outstanding = outstandingPaise(loan.totalRepaymentPaise, loan.totalPaidPaise);
+  if (body.amountPaise > outstanding) {
+    throw AppError.validation('Payment amount exceeds outstanding balance', [
+      { outstandingPaise: outstanding, amountPaise: body.amountPaise },
+    ]);
+  }
+
+  const paidAt = body.paidAt ? new Date(`${body.paidAt}T00:00:00.000Z`) : new Date();
+
+  let payment: PaymentDocument;
+  try {
+    payment = await Payment.create({
+      loanId: loan._id,
+      recordedBy: new Types.ObjectId(actorId),
+      utr: body.utr.trim(),
+      amountPaise: body.amountPaise,
+      paidAt,
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw AppError.conflict('UTR must be unique');
+    }
+    throw error;
+  }
+
+  loan.totalPaidPaise += body.amountPaise;
+  if (loan.totalPaidPaise === loan.totalRepaymentPaise) {
+    loan.status = 'CLOSED';
+    loan.closedAt = new Date();
+  }
+  await loan.save();
+
+  return {
+    payment: toPaymentDto(payment),
+    loan: toLoanDto(loan),
+  };
+}

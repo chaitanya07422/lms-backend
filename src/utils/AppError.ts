@@ -5,6 +5,7 @@ export type AppErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'PAYLOAD_TOO_LARGE'
   | 'TOO_MANY_REQUESTS'
   | 'INTERNAL_ERROR';
 
@@ -44,6 +45,10 @@ export class AppError extends Error {
 
   static conflict(message: string, details: unknown[] = []): AppError {
     return new AppError(409, 'CONFLICT', message, details);
+  }
+
+  static payloadTooLarge(message = 'Payload too large'): AppError {
+    return new AppError(413, 'PAYLOAD_TOO_LARGE', message);
   }
 
   static tooManyRequests(message = 'Too many requests'): AppError {
