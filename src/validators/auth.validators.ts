@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+import { passwordSchema } from './password';
+
 export const registerBodySchema = z.object({
   email: z.string().trim().email().toLowerCase(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordSchema,
   fullName: z.string().trim().min(2).max(100),
 });
 

@@ -78,6 +78,17 @@ describe('auth', () => {
     expect(response.status).toBe(401);
   });
 
+  it('rejects weak passwords on register', async () => {
+    const response = await request(app).post('/api/v1/auth/register').send({
+      email: 'weak@example.com',
+      password: 'password',
+      fullName: 'Weak User',
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.success).toBe(false);
+  });
+
   it('returns current user for /auth/me', async () => {
     const registered = await request(app).post('/api/v1/auth/register').send({
       email: 'me@example.com',

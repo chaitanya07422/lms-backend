@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { passwordSchema } from './password';
+
 /** Staff roles only — borrowers self-register via the public signup flow. */
 const ADMIN_CREATABLE_ROLES = [
   'admin',
@@ -11,7 +13,7 @@ const ADMIN_CREATABLE_ROLES = [
 
 export const createUserBodySchema = z.object({
   email: z.string().trim().email().toLowerCase(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: passwordSchema,
   fullName: z.string().trim().min(2).max(100),
   role: z.enum(ADMIN_CREATABLE_ROLES),
 });
