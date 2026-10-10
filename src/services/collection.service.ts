@@ -1,6 +1,6 @@
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 
-import { Loan } from '../models/Loan';
+import { Loan, type LoanDocument } from '../models/Loan';
 import { Payment, type PaymentDocument } from '../models/Payment';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
@@ -155,53 +155,244 @@ export async function listPayments(loanId: string): Promise<PaymentDto[]> {
   return payments.map(toPaymentDto);
 }
 
-export async function recordPayment(
-  loanId: string,
-  actorId: string,
-  body: RecordPaymentBody,
-): Promise<{ payment: PaymentDto; loan: LoanDto }> {
-  const loan = await Loan.findById(loanId);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
+function isTransactionUnsupported(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('transaction numbers are only allowed') ||
+    message.includes('replica set') ||
+    message.includes('transactions are not supported')
+  );
+}
+
+function assertPaymentAllowed(loan: LoanDocument, amountPaise: number): void {
   if (loan.status !== 'DISBURSED') {
     throw AppError.conflict(`Cannot record payment for loan in status ${loan.status}`);
   }
-
   const outstanding = outstandingPaise(loan.totalRepaymentPaise, loan.totalPaidPaise);
-  if (body.amountPaise > outstanding) {
+  if (amountPaise > outstanding) {
     throw AppError.validation('Payment amount exceeds outstanding balance', [
-      { outstandingPaise: outstanding, amountPaise: body.amountPaise },
+      { outstandingPaise: outstanding, amountPaise },
     ]);
   }
+}
 
-  const paidAt = body.paidAt ? new Date(`${body.paidAt}T00:00:00.000Z`) : new Date();
+/** Apply amount only if still DISBURSED and amount fits outstanding (race-safe). */
+async function applyPaymentToLoanAtomic(
+  loanId: string | Types.ObjectId,
+  amountPaise: number,
+  session?: mongoose.ClientSession,
+): Promise<LoanDocument | null> {
+  const closedAt = new Date();
+  return Loan.findOneAndUpdate(
+    {
+      _id: loanId,
+      status: 'DISBURSED',
+      $expr: {
+        $lte: [{ $add: ['$totalPaidPaise', amountPaise] }, '$totalRepaymentPaise'],
+      },
+    },
+    [
+      {
+        $set: {
+          totalPaidPaise: { $add: ['$totalPaidPaise', amountPaise] },
+          updatedAt: new Date(),
+        },
+      },
+      {
+        $set: {
+          status: {
+            $cond: [
+              { $eq: ['$totalPaidPaise', '$totalRepaymentPaise'] },
+              'CLOSED',
+              '$status',
+            ],
+          },
+          closedAt: {
+            $cond: [
+              { $eq: ['$totalPaidPaise', '$totalRepaymentPaise'] },
+              closedAt,
+              '$closedAt',
+            ],
+          },
+        },
+      },
+    ],
+    { new: true, session },
+  );
+}
 
-  let payment: PaymentDocument;
+async function createPaymentRecord(
+  input: {
+    loanId: Types.ObjectId;
+    actorId: Types.ObjectId;
+    utr: string;
+    amountPaise: number;
+    paidAt: Date;
+  },
+  session?: mongoose.ClientSession,
+): Promise<PaymentDocument> {
   try {
-    payment = await Payment.create({
-      loanId: loan._id,
-      recordedBy: new Types.ObjectId(actorId),
-      utr: body.utr.trim(),
-      amountPaise: body.amountPaise,
-      paidAt,
-    });
+    const created = await Payment.create(
+      [
+        {
+          loanId: input.loanId,
+          recordedBy: input.actorId,
+          utr: input.utr,
+          amountPaise: input.amountPaise,
+          paidAt: input.paidAt,
+        },
+      ],
+      session ? { session } : undefined,
+    );
+    const payment = created[0];
+    if (!payment) {
+      throw new Error('Payment create returned empty result');
+    }
+    return payment;
   } catch (error) {
     if (isDuplicateKeyError(error)) {
       throw AppError.conflict('UTR must be unique');
     }
     throw error;
   }
+}
 
-  loan.totalPaidPaise += body.amountPaise;
-  if (loan.totalPaidPaise === loan.totalRepaymentPaise) {
-    loan.status = 'CLOSED';
-    loan.closedAt = new Date();
+async function rejectFailedLoanApply(loanId: string, amountPaise: number): Promise<never> {
+  const loan = await Loan.findById(loanId);
+  if (!loan) {
+    throw AppError.notFound('Loan not found');
   }
-  await loan.save();
+  assertPaymentAllowed(loan, amountPaise);
+  // Status/outstanding looked fine on re-read but atomic update lost the race.
+  throw AppError.conflict('Could not record payment due to a concurrent update; retry');
+}
+
+/**
+ * Record a payment with outstanding check applied atomically.
+ * Prefers a multi-doc transaction (Atlas/replica set); falls back to
+ * conditional loan update + compensating payment delete on standalone MongoDB.
+ */
+export async function recordPayment(
+  loanId: string,
+  actorId: string,
+  body: RecordPaymentBody,
+): Promise<{ payment: PaymentDto; loan: LoanDto }> {
+  if (!Types.ObjectId.isValid(loanId)) {
+    throw AppError.notFound('Loan not found');
+  }
+
+  const amountPaise = body.amountPaise;
+  const utr = body.utr.trim();
+  const paidAt = body.paidAt ? new Date(`${body.paidAt}T00:00:00.000Z`) : new Date();
+  const loanObjectId = new Types.ObjectId(loanId);
+  const actorObjectId = new Types.ObjectId(actorId);
+
+  try {
+    return await recordPaymentInTransaction({
+      loanId,
+      loanObjectId,
+      actorObjectId,
+      amountPaise,
+      utr,
+      paidAt,
+    });
+  } catch (error) {
+    if (error instanceof AppError || !isTransactionUnsupported(error)) {
+      throw error;
+    }
+    return recordPaymentStandaloneSafe({
+      loanId,
+      loanObjectId,
+      actorObjectId,
+      amountPaise,
+      utr,
+      paidAt,
+    });
+  }
+}
+
+async function recordPaymentInTransaction(input: {
+  loanId: string;
+  loanObjectId: Types.ObjectId;
+  actorObjectId: Types.ObjectId;
+  amountPaise: number;
+  utr: string;
+  paidAt: Date;
+}): Promise<{ payment: PaymentDto; loan: LoanDto }> {
+  const session = await mongoose.startSession();
+  let payment!: PaymentDocument;
+  let loan!: LoanDocument;
+
+  try {
+    await session.withTransaction(async () => {
+      const current = await Loan.findById(input.loanObjectId).session(session);
+      if (!current) {
+        throw AppError.notFound('Loan not found');
+      }
+      assertPaymentAllowed(current, input.amountPaise);
+
+      payment = await createPaymentRecord(
+        {
+          loanId: input.loanObjectId,
+          actorId: input.actorObjectId,
+          utr: input.utr,
+          amountPaise: input.amountPaise,
+          paidAt: input.paidAt,
+        },
+        session,
+      );
+
+      const updated = await applyPaymentToLoanAtomic(
+        input.loanObjectId,
+        input.amountPaise,
+        session,
+      );
+      if (!updated) {
+        throw AppError.conflict('Could not record payment due to a concurrent update; retry');
+      }
+      loan = updated;
+    });
+  } finally {
+    await session.endSession();
+  }
 
   return {
     payment: toPaymentDto(payment),
     loan: toLoanDto(loan),
+  };
+}
+
+async function recordPaymentStandaloneSafe(input: {
+  loanId: string;
+  loanObjectId: Types.ObjectId;
+  actorObjectId: Types.ObjectId;
+  amountPaise: number;
+  utr: string;
+  paidAt: Date;
+}): Promise<{ payment: PaymentDto; loan: LoanDto }> {
+  const current = await Loan.findById(input.loanObjectId);
+  if (!current) {
+    throw AppError.notFound('Loan not found');
+  }
+  assertPaymentAllowed(current, input.amountPaise);
+
+  const payment = await createPaymentRecord({
+    loanId: input.loanObjectId,
+    actorId: input.actorObjectId,
+    utr: input.utr,
+    amountPaise: input.amountPaise,
+    paidAt: input.paidAt,
+  });
+
+  const updated = await applyPaymentToLoanAtomic(input.loanObjectId, input.amountPaise);
+  if (!updated) {
+    await Payment.deleteOne({ _id: payment._id });
+    return rejectFailedLoanApply(input.loanId, input.amountPaise);
+  }
+
+  return {
+    payment: toPaymentDto(payment),
+    loan: toLoanDto(updated),
   };
 }
