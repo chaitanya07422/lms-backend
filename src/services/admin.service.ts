@@ -1,6 +1,5 @@
 import bcrypt from 'bcrypt';
 
-import { ACTIVE_LOAN_STATUSES } from '../config/loan';
 import { env } from '../config/env';
 import { Loan } from '../models/Loan';
 import { Payment } from '../models/Payment';
@@ -108,7 +107,7 @@ export async function getAdminSummary(query: AdminSummaryQuery) {
     disbursed,
     closed,
     rejected,
-    activeBorrowerIds,
+    appliedBorrowerIds,
     recentLoans,
     recentPayments,
   ] = await Promise.all([
@@ -117,7 +116,7 @@ export async function getAdminSummary(query: AdminSummaryQuery) {
     Loan.countDocuments({ status: 'DISBURSED' }),
     Loan.countDocuments({ status: 'CLOSED' }),
     Loan.countDocuments({ status: 'REJECTED' }),
-    Loan.distinct('borrowerId', { status: { $in: [...ACTIVE_LOAN_STATUSES] } }),
+    Loan.distinct('borrowerId'),
     Loan.find()
       .sort({ updatedAt: -1 })
       .limit(200)
@@ -138,7 +137,7 @@ export async function getAdminSummary(query: AdminSummaryQuery) {
 
   const leads = await User.countDocuments({
     role: 'borrower',
-    _id: { $nin: activeBorrowerIds },
+    _id: { $nin: appliedBorrowerIds },
   });
 
   const activity: ActivityBuild[] = [];

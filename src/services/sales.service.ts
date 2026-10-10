@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
 
-import { ACTIVE_LOAN_STATUSES } from '../config/loan';
 import { Loan } from '../models/Loan';
 import { SalarySlip } from '../models/SalarySlip';
 import { User } from '../models/User';
@@ -37,13 +36,12 @@ function decodeCursor(raw: string): LeadCursor {
 }
 
 export async function listLeads(query: CursorPaginationQuery) {
-  const activeBorrowerIds = await Loan.distinct('borrowerId', {
-    status: { $in: [...ACTIVE_LOAN_STATUSES] },
-  });
+  // Lead = registered borrower who has never applied (no loan document of any status).
+  const appliedBorrowerIds = await Loan.distinct('borrowerId');
 
   const filter: Record<string, unknown> = {
     role: 'borrower',
-    _id: { $nin: activeBorrowerIds },
+    _id: { $nin: appliedBorrowerIds },
   };
 
   if (query.cursor) {
@@ -100,11 +98,8 @@ export async function getLeadDetail(userId: string) {
     throw AppError.notFound('Lead not found');
   }
 
-  const active = await Loan.findOne({
-    borrowerId: user._id,
-    status: { $in: [...ACTIVE_LOAN_STATUSES] },
-  });
-  if (active) {
+  const hasApplied = await Loan.exists({ borrowerId: user._id });
+  if (hasApplied) {
     throw AppError.notFound('Lead not found');
   }
 
