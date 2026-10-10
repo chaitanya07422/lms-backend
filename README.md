@@ -6,8 +6,13 @@ Borrowers apply for loans; internal executives manage them through Sales → San
 
 Frontend: sibling repo **`lms-frontend`**.
 
-**Live URL:** [https://creditsea.duckdns.org](https://creditsea.duckdns.org)  
-**API:** `https://creditsea.duckdns.org/api/v1` · **Health:** `https://creditsea.duckdns.org/api/v1/health`
+| | |
+|--|--|
+| **App** | https://creditsea.duckdns.org |
+| **API** | https://creditsea.duckdns.org/api/v1 |
+| **Health** | https://creditsea.duckdns.org/api/v1/health |
+
+> **Test on production:** Use the seeded accounts below — password: `Password123!` — already in the live DB.
 
 ---
 
@@ -44,6 +49,9 @@ Frontend: sibling repo **`lms-frontend`**.
 ### Install and run
 
 ```bash
+git clone https://github.com/chaitanya07422/lms-backend.git
+git clone https://github.com/chaitanya07422/lms-frontend.git
+
 cd lms-backend
 cp .env.example .env
 npm install
@@ -99,7 +107,7 @@ For Atlas: put the `mongodb+srv://…` URI in `MONGODB_URI` and allow your IP in
 
 ## Login credentials (seed)
 
-After `npm run seed`, password for **all** accounts:
+Password for **all** accounts below:
 
 ```text
 Password123!
@@ -114,7 +122,7 @@ Password123!
 | Collection | `collection@lms.local` | Collection only |
 | Borrower | `borrower@lms.local` | Borrower portal only |
 
-Borrowers can also **register** a new account from the UI.
+After local setup, run `npm run seed` once. Borrowers can also **register** a new account from the UI.
 
 ---
 
