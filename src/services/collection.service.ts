@@ -34,11 +34,12 @@ function toPaymentDto(payment: PaymentDocument): PaymentDto {
   };
 }
 
-type QueueCursor = { disbursedAt: string; id: string };
+type QueueStatus = 'DISBURSED' | 'CLOSED';
+type QueueCursor = { status: QueueStatus; disbursedAt: string; id: string };
 
-function encodeCursor(disbursedAt: Date, id: string): string {
+function encodeCursor(status: QueueStatus, disbursedAt: Date, id: string): string {
   return Buffer.from(
-    JSON.stringify({ disbursedAt: disbursedAt.toISOString(), id }),
+    JSON.stringify({ status, disbursedAt: disbursedAt.toISOString(), id }),
     'utf8',
   ).toString('base64url');
 }
@@ -46,15 +47,21 @@ function encodeCursor(disbursedAt: Date, id: string): string {
 function decodeCursor(raw: string): QueueCursor {
   try {
     const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      status?: unknown;
       disbursedAt?: unknown;
       id?: unknown;
     };
     if (
+      (parsed.status === 'DISBURSED' || parsed.status === 'CLOSED') &&
       typeof parsed.disbursedAt === 'string' &&
       typeof parsed.id === 'string' &&
       Types.ObjectId.isValid(parsed.id)
     ) {
-      return { disbursedAt: parsed.disbursedAt, id: parsed.id };
+      return {
+        status: parsed.status,
+        disbursedAt: parsed.disbursedAt,
+        id: parsed.id,
+      };
     }
   } catch {
     /* fall through */
@@ -68,20 +75,24 @@ export async function listDisbursedLoans(query: CursorPaginationQuery): Promise<
   hasMore: boolean;
 }> {
   const limit = query.limit;
-  const filter: Record<string, unknown> = { status: 'DISBURSED' };
+  const filter: Record<string, unknown> = {
+    status: { $in: ['DISBURSED', 'CLOSED'] },
+  };
 
   if (query.cursor) {
     const cursor = decodeCursor(query.cursor);
     const cursorDate = new Date(cursor.disbursedAt);
     const cursorId = new Types.ObjectId(cursor.id);
+    // Sort: status DESC (DISBURSED before CLOSED), then disbursedAt/_id DESC.
     filter.$or = [
-      { disbursedAt: { $lt: cursorDate } },
-      { disbursedAt: cursorDate, _id: { $lt: cursorId } },
+      { status: { $lt: cursor.status } },
+      { status: cursor.status, disbursedAt: { $lt: cursorDate } },
+      { status: cursor.status, disbursedAt: cursorDate, _id: { $lt: cursorId } },
     ];
   }
 
   const loans = await Loan.find(filter)
-    .sort({ disbursedAt: -1, _id: -1 })
+    .sort({ status: -1, disbursedAt: -1, _id: -1 })
     .limit(limit + 1);
 
   const hasMore = loans.length > limit;
@@ -103,8 +114,8 @@ export async function listDisbursedLoans(query: CursorPaginationQuery): Promise<
 
   const last = page[page.length - 1];
   const nextCursor =
-    hasMore && last?.disbursedAt
-      ? encodeCursor(last.disbursedAt, String(last._id))
+    hasMore && last?.disbursedAt && (last.status === 'DISBURSED' || last.status === 'CLOSED')
+      ? encodeCursor(last.status, last.disbursedAt, String(last._id))
       : null;
 
   return { items, nextCursor, hasMore };
