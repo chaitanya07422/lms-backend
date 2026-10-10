@@ -1,10 +1,12 @@
 import { Readable } from 'node:stream';
+import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
 
 import { ConfigFileAuthenticationDetailsProvider, Region } from 'oci-common';
 import { ObjectStorageClient } from 'oci-objectstorage';
 
 import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
+import { logger } from '../utils/logger';
 import type { ObjectStore, PutObjectInput, StoredObjectRef } from './types';
 
 const OCI_PREFIX = 'oci:';
@@ -18,6 +20,21 @@ function toReadable(value: unknown): Readable {
   }
   if (value instanceof Uint8Array) {
     return Readable.from(Buffer.from(value));
+  }
+  // oci-sdk getObject returns a Web ReadableStream in current Node runtimes.
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { getReader?: unknown }).getReader === 'function'
+  ) {
+    return Readable.fromWeb(value as NodeWebReadableStream);
+  }
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function'
+  ) {
+    return Readable.from(value as AsyncIterable<unknown>);
   }
   throw AppError.notFound('Salary slip file missing on server');
 }
@@ -79,6 +96,10 @@ export class OciObjectStore implements ObjectStore {
       if (error instanceof AppError) {
         throw error;
       }
+      logger.warn('oci_get_object_failed', {
+        objectName,
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw AppError.notFound('Salary slip file missing on server');
     }
   }

@@ -6,7 +6,10 @@ import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
 import { isDuplicateKeyError } from '../utils/mongoErrors';
 import { outstandingPaise } from '../utils/money';
-import type { RecordPaymentBody } from '../validators/ops.validators';
+import type {
+  CursorPaginationQuery,
+  RecordPaymentBody,
+} from '../validators/ops.validators';
 import { toLoanDto, type LoanDto } from './loan.service';
 
 export interface PaymentDto {
@@ -31,16 +34,65 @@ function toPaymentDto(payment: PaymentDocument): PaymentDto {
   };
 }
 
-export async function listDisbursedLoans(): Promise<
-  Array<LoanDto & { borrowerName: string; borrowerEmail: string }>
-> {
-  const loans = await Loan.find({ status: 'DISBURSED' }).sort({ disbursedAt: -1 });
+type QueueCursor = { disbursedAt: string; id: string };
+
+function encodeCursor(disbursedAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ disbursedAt: disbursedAt.toISOString(), id }),
+    'utf8',
+  ).toString('base64url');
+}
+
+function decodeCursor(raw: string): QueueCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      disbursedAt?: unknown;
+      id?: unknown;
+    };
+    if (
+      typeof parsed.disbursedAt === 'string' &&
+      typeof parsed.id === 'string' &&
+      Types.ObjectId.isValid(parsed.id)
+    ) {
+      return { disbursedAt: parsed.disbursedAt, id: parsed.id };
+    }
+  } catch {
+    /* fall through */
+  }
+  throw AppError.validation('Invalid queue cursor');
+}
+
+export async function listDisbursedLoans(query: CursorPaginationQuery): Promise<{
+  items: Array<LoanDto & { borrowerName: string; borrowerEmail: string }>;
+  nextCursor: string | null;
+  hasMore: boolean;
+}> {
+  const limit = query.limit;
+  const filter: Record<string, unknown> = { status: 'DISBURSED' };
+
+  if (query.cursor) {
+    const cursor = decodeCursor(query.cursor);
+    const cursorDate = new Date(cursor.disbursedAt);
+    const cursorId = new Types.ObjectId(cursor.id);
+    filter.$or = [
+      { disbursedAt: { $lt: cursorDate } },
+      { disbursedAt: cursorDate, _id: { $lt: cursorId } },
+    ];
+  }
+
+  const loans = await Loan.find(filter)
+    .sort({ disbursedAt: -1, _id: -1 })
+    .limit(limit + 1);
+
+  const hasMore = loans.length > limit;
+  const page = hasMore ? loans.slice(0, limit) : loans;
+
   const borrowers = await User.find({
-    _id: { $in: loans.map((loan) => loan.borrowerId) },
+    _id: { $in: page.map((loan) => loan.borrowerId) },
   });
   const byId = new Map(borrowers.map((b) => [String(b._id), b]));
 
-  return loans.map((loan) => {
+  const items = page.map((loan) => {
     const borrower = byId.get(String(loan.borrowerId));
     return {
       ...toLoanDto(loan),
@@ -48,6 +100,14 @@ export async function listDisbursedLoans(): Promise<
       borrowerEmail: borrower?.email ?? '',
     };
   });
+
+  const last = page[page.length - 1];
+  const nextCursor =
+    hasMore && last?.disbursedAt
+      ? encodeCursor(last.disbursedAt, String(last._id))
+      : null;
+
+  return { items, nextCursor, hasMore };
 }
 
 export async function getCollectionLoanDetail(loanId: string): Promise<{

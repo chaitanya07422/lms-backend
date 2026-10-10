@@ -3,14 +3,22 @@ import { Router } from 'express';
 import * as collectionController from '../controllers/collection.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
+import { validateQuery } from '../middleware/validateQuery';
 import { asyncHandler } from '../utils/asyncHandler';
-import { recordPaymentBodySchema } from '../validators/ops.validators';
+import {
+  cursorPaginationQuerySchema,
+  recordPaymentBodySchema,
+} from '../validators/ops.validators';
 
 const collectionRouter = Router();
 
 collectionRouter.use(authenticate, authorize('collection', 'admin'));
 
-collectionRouter.get('/loans', asyncHandler(collectionController.listLoans));
+collectionRouter.get(
+  '/loans',
+  validateQuery(cursorPaginationQuerySchema),
+  asyncHandler(collectionController.listLoans),
+);
 collectionRouter.get('/loans/:loanId', asyncHandler(collectionController.getLoan));
 collectionRouter.get('/loans/:loanId/payments', asyncHandler(collectionController.listPayments));
 collectionRouter.post(

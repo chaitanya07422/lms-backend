@@ -3,7 +3,10 @@ import type { Request, Response } from 'express';
 import * as sanctionService from '../services/sanction.service';
 import { AppError } from '../utils/AppError';
 import { sendSuccess } from '../utils/response';
-import type { RejectLoanBody } from '../validators/ops.validators';
+import type {
+  CursorPaginationQuery,
+  RejectLoanBody,
+} from '../validators/ops.validators';
 
 function requireUserId(req: Request): string {
   if (!req.user) {
@@ -12,9 +15,11 @@ function requireUserId(req: Request): string {
   return req.user.id;
 }
 
-export async function listLoans(_req: Request, res: Response): Promise<void> {
-  const items = await sanctionService.listAppliedLoans();
-  sendSuccess(res, { items });
+export async function listLoans(req: Request, res: Response): Promise<void> {
+  const page = await sanctionService.listAppliedLoans(
+    req.query as unknown as CursorPaginationQuery,
+  );
+  sendSuccess(res, page);
 }
 
 export async function getLoan(req: Request, res: Response): Promise<void> {

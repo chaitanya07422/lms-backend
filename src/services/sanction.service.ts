@@ -4,19 +4,75 @@ import { Loan } from '../models/Loan';
 import { SalarySlip } from '../models/SalarySlip';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
+import type { CursorPaginationQuery } from '../validators/ops.validators';
 import { toPublicUser } from './auth.service';
 import { toLoanDto, type LoanDto } from './loan.service';
 import { toSalarySlipDto } from './salarySlip.service';
 
-export async function listAppliedLoans(): Promise<
-  Array<LoanDto & { borrowerName: string; borrowerEmail: string; borrowerPan: string }>
-> {
-  const loans = await Loan.find({ status: 'APPLIED' }).sort({ appliedAt: -1 });
-  const borrowerIds = loans.map((loan) => loan.borrowerId);
+export type SanctionQueueItem = LoanDto & {
+  borrowerName: string;
+  borrowerEmail: string;
+  borrowerPan: string;
+};
+
+type QueueCursor = { appliedAt: string; id: string };
+
+function encodeCursor(appliedAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ appliedAt: appliedAt.toISOString(), id }),
+    'utf8',
+  ).toString('base64url');
+}
+
+function decodeCursor(raw: string): QueueCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      appliedAt?: unknown;
+      id?: unknown;
+    };
+    if (
+      typeof parsed.appliedAt === 'string' &&
+      typeof parsed.id === 'string' &&
+      Types.ObjectId.isValid(parsed.id)
+    ) {
+      return { appliedAt: parsed.appliedAt, id: parsed.id };
+    }
+  } catch {
+    /* fall through */
+  }
+  throw AppError.validation('Invalid queue cursor');
+}
+
+export async function listAppliedLoans(query: CursorPaginationQuery): Promise<{
+  items: SanctionQueueItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}> {
+  const limit = query.limit;
+  const filter: Record<string, unknown> = { status: 'APPLIED' };
+
+  if (query.cursor) {
+    const cursor = decodeCursor(query.cursor);
+    const cursorDate = new Date(cursor.appliedAt);
+    const cursorId = new Types.ObjectId(cursor.id);
+    filter.$or = [
+      { appliedAt: { $lt: cursorDate } },
+      { appliedAt: cursorDate, _id: { $lt: cursorId } },
+    ];
+  }
+
+  const loans = await Loan.find(filter)
+    .sort({ appliedAt: -1, _id: -1 })
+    .limit(limit + 1);
+
+  const hasMore = loans.length > limit;
+  const page = hasMore ? loans.slice(0, limit) : loans;
+
+  const borrowerIds = page.map((loan) => loan.borrowerId);
   const borrowers = await User.find({ _id: { $in: borrowerIds } });
   const byId = new Map(borrowers.map((b) => [String(b._id), b]));
 
-  return loans.map((loan) => {
+  const items = page.map((loan) => {
     const borrower = byId.get(String(loan.borrowerId));
     return {
       ...toLoanDto(loan),
@@ -25,6 +81,14 @@ export async function listAppliedLoans(): Promise<
       borrowerPan: borrower?.pan ?? '—',
     };
   });
+
+  const last = page[page.length - 1];
+  const nextCursor =
+    hasMore && last?.appliedAt
+      ? encodeCursor(last.appliedAt, String(last._id))
+      : null;
+
+  return { items, nextCursor, hasMore };
 }
 
 export async function getAppliedLoanDetail(loanId: string) {

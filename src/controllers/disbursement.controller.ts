@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import * as disbursementService from '../services/disbursement.service';
 import { AppError } from '../utils/AppError';
 import { sendSuccess } from '../utils/response';
+import type { CursorPaginationQuery } from '../validators/ops.validators';
 
 function requireUserId(req: Request): string {
   if (!req.user) {
@@ -11,9 +12,11 @@ function requireUserId(req: Request): string {
   return req.user.id;
 }
 
-export async function listLoans(_req: Request, res: Response): Promise<void> {
-  const items = await disbursementService.listSanctionedLoans();
-  sendSuccess(res, { items });
+export async function listLoans(req: Request, res: Response): Promise<void> {
+  const page = await disbursementService.listSanctionedLoans(
+    req.query as unknown as CursorPaginationQuery,
+  );
+  sendSuccess(res, page);
 }
 
 export async function getLoan(req: Request, res: Response): Promise<void> {

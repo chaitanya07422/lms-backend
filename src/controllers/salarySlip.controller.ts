@@ -14,11 +14,13 @@ export async function download(req: Request, res: Response): Promise<void> {
   }
 
   const file = await salarySlipService.resolveSalarySlipDownload(slipId, req.user);
+  const inline = req.query.inline === '1' || req.query.inline === 'true';
+  const safeName = file.originalName.replace(/"/g, '');
 
   res.setHeader('Content-Type', file.mimeType);
   res.setHeader(
     'Content-Disposition',
-    `attachment; filename="${file.originalName.replace(/"/g, '')}"`,
+    `${inline ? 'inline' : 'attachment'}; filename="${safeName}"`,
   );
   file.stream.pipe(res);
 }
