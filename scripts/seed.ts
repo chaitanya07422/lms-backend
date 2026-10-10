@@ -1,6 +1,7 @@
 /**
- * Creates one demo account per role (idempotent upsert by email).
+ * Creates demo accounts (idempotent upsert by email).
  * Run: npm run seed
+ * Admin only: npm run seed:admin
  */
 import bcrypt from 'bcrypt';
 
@@ -50,9 +51,14 @@ const accounts: SeedAccount[] = [
 async function seed(): Promise<void> {
   await connectDatabase();
 
+  const adminOnly = process.argv.includes('--admin-only');
+  const toSeed = adminOnly
+    ? accounts.filter((account) => account.role === 'admin')
+    : accounts;
+
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, env.BCRYPT_SALT_ROUNDS);
 
-  for (const account of accounts) {
+  for (const account of toSeed) {
     await User.findOneAndUpdate(
       { email: account.email },
       {

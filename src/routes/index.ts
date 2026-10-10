@@ -10,8 +10,17 @@ import { loanRouter } from './loan.routes';
 import { salarySlipRouter } from './salarySlip.routes';
 import { salesRouter } from './sales.routes';
 import { sanctionRouter } from './sanction.routes';
+import { sendSuccess } from '../utils/response';
 
 const apiRouter = Router();
+
+apiRouter.get('/', (_req, res) => {
+  sendSuccess(res, {
+    name: 'LMS API',
+    version: 'v1',
+    health: '/api/v1/health',
+  });
+});
 
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/auth', authRouter);
