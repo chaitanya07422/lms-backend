@@ -9,7 +9,7 @@ import { toLoanDto, type LoanDto } from './loan.service';
 import { toSalarySlipDto } from './salarySlip.service';
 
 export async function listAppliedLoans(): Promise<
-  Array<LoanDto & { borrowerName: string; borrowerEmail: string }>
+  Array<LoanDto & { borrowerName: string; borrowerEmail: string; borrowerPan: string }>
 > {
   const loans = await Loan.find({ status: 'APPLIED' }).sort({ appliedAt: -1 });
   const borrowerIds = loans.map((loan) => loan.borrowerId);
@@ -22,6 +22,7 @@ export async function listAppliedLoans(): Promise<
       ...toLoanDto(loan),
       borrowerName: borrower?.fullName ?? 'Unknown',
       borrowerEmail: borrower?.email ?? '',
+      borrowerPan: borrower?.pan ?? '—',
     };
   });
 }

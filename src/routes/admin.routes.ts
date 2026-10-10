@@ -10,6 +10,8 @@ const adminRouter = Router();
 
 adminRouter.use(authenticate, authorize('admin'));
 
+adminRouter.get('/summary', asyncHandler(adminController.getSummary));
+
 adminRouter.post(
   '/users',
   validateBody(createUserBodySchema),

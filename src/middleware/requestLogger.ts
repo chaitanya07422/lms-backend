@@ -2,10 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 
 import { logger } from '../utils/logger';
 
-/**
- * Minimal access log: method, path, status, duration.
- * Does not log bodies, headers, or tokens.
- */
+/** Access log only — no bodies/tokens. */
 export function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const started = Date.now();
 

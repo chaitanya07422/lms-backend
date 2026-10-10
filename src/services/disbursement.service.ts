@@ -6,7 +6,7 @@ import { AppError } from '../utils/AppError';
 import { toLoanDto, type LoanDto } from './loan.service';
 
 export async function listSanctionedLoans(): Promise<
-  Array<LoanDto & { borrowerName: string; borrowerEmail: string }>
+  Array<LoanDto & { borrowerName: string; borrowerEmail: string; borrowerPan: string }>
 > {
   const loans = await Loan.find({ status: 'SANCTIONED' }).sort({ sanctionedAt: -1 });
   const borrowers = await User.find({
@@ -20,6 +20,7 @@ export async function listSanctionedLoans(): Promise<
       ...toLoanDto(loan),
       borrowerName: borrower?.fullName ?? 'Unknown',
       borrowerEmail: borrower?.email ?? '',
+      borrowerPan: borrower?.pan ?? '—',
     };
   });
 }

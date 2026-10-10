@@ -51,7 +51,7 @@ export async function listDisbursedLoans(): Promise<
 }
 
 export async function getCollectionLoanDetail(loanId: string): Promise<{
-  loan: LoanDto;
+  loan: LoanDto & { borrowerName: string; borrowerEmail: string };
   payments: PaymentDto[];
 }> {
   const loan = await Loan.findById(loanId);
@@ -59,9 +59,17 @@ export async function getCollectionLoanDetail(loanId: string): Promise<{
     throw AppError.notFound('Collection loan not found');
   }
 
-  const payments = await Payment.find({ loanId }).sort({ paidAt: -1 });
+  const [borrower, payments] = await Promise.all([
+    User.findById(loan.borrowerId),
+    Payment.find({ loanId }).sort({ paidAt: -1 }),
+  ]);
+
   return {
-    loan: toLoanDto(loan),
+    loan: {
+      ...toLoanDto(loan),
+      borrowerName: borrower?.fullName ?? 'Unknown',
+      borrowerEmail: borrower?.email ?? '',
+    },
     payments: payments.map(toPaymentDto),
   };
 }

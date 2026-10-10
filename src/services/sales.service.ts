@@ -1,5 +1,6 @@
 import { ACTIVE_LOAN_STATUSES } from '../config/loan';
 import { Loan } from '../models/Loan';
+import { SalarySlip } from '../models/SalarySlip';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
 import { toPublicUser } from './auth.service';
@@ -22,14 +23,29 @@ export async function listLeads(page: number, limit: number) {
       .limit(limit),
   ]);
 
+  const userIds = users.map((u) => u._id);
+  const slips = await SalarySlip.find({ borrowerId: { $in: userIds } }).select('borrowerId');
+  const slipSet = new Set(slips.map((s) => String(s.borrowerId)));
+
   return {
-    items: users.map((user) => ({
-      id: String(user._id),
-      email: user.email,
-      fullName: user.fullName,
-      profileComplete: user.profileComplete,
-      createdAt: user.createdAt.toISOString(),
-    })),
+    items: users.map((user) => {
+      const hasSalarySlip = slipSet.has(String(user._id));
+      let progress: 'SIGNED_UP' | 'DETAILS_DONE' | 'SLIP_UPLOADED' = 'SIGNED_UP';
+      if (hasSalarySlip) {
+        progress = 'SLIP_UPLOADED';
+      } else if (user.profileComplete) {
+        progress = 'DETAILS_DONE';
+      }
+      return {
+        id: String(user._id),
+        email: user.email,
+        fullName: user.fullName,
+        profileComplete: user.profileComplete,
+        hasSalarySlip,
+        progress,
+        createdAt: user.createdAt.toISOString(),
+      };
+    }),
     meta: {
       page,
       limit,
