@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -22,6 +23,8 @@ export function createApp(): express.Application {
   app.use('/api/v1', apiRouter);
 
   app.use(notFoundHandler);
+  // Captures unhandled errors; then our handler formats the JSON envelope.
+  Sentry.setupExpressErrorHandler(app);
   app.use(errorHandler);
 
   return app;

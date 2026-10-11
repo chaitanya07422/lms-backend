@@ -26,6 +26,11 @@ const envSchema = z
     OCI_REGION: z.string().optional(),
     OCI_CONFIG_FILE: z.string().optional(),
     OCI_PROFILE: z.string().default('DEFAULT'),
+    /** Optional — leave empty / unset to disable Sentry. */
+    SENTRY_DSN: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().url().optional(),
+    ),
   })
   .superRefine((data, ctx) => {
     if (data.STORAGE_DRIVER === 'oci') {

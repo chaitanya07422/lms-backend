@@ -82,6 +82,7 @@ AUTH_RATE_LIMIT_MAX=20
 STORAGE_DRIVER=local
 UPLOADS_DIR=./uploads
 MAX_UPLOAD_BYTES=5242880
+# SENTRY_DSN=
 ```
 
 | Variable | Description |
@@ -91,6 +92,7 @@ MAX_UPLOAD_BYTES=5242880
 | `JWT_SECRET` | Long random string for signing tokens |
 | `STORAGE_DRIVER` | `local` (default) or `oci` |
 | `MAX_UPLOAD_BYTES` | Salary-slip limit (5 MB per assignment) |
+| `SENTRY_DSN` | Optional Sentry DSN; leave unset to disable monitoring |
 
 For Atlas: put the `mongodb+srv://…` URI in `MONGODB_URI` and allow your IP in Atlas Network Access.
 

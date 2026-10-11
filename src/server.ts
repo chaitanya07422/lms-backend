@@ -1,3 +1,5 @@
+import './instrument';
+
 import { createApp } from './app';
 import { connectDatabase } from './config/db';
 import { env } from './config/env';
@@ -9,7 +11,11 @@ async function bootstrap(): Promise<void> {
   const app = createApp();
 
   app.listen(env.PORT, () => {
-    logger.info('server_started', { port: env.PORT, env: env.NODE_ENV });
+    logger.info('server_started', {
+      port: env.PORT,
+      env: env.NODE_ENV,
+      sentry: Boolean(env.SENTRY_DSN),
+    });
   });
 }
 

@@ -18,6 +18,7 @@
     "seed:admin": "tsx scripts/seed.ts --admin-only"
   },
   "dependencies": {
+    "@sentry/node": "^11.6.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
