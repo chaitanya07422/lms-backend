@@ -17,7 +17,7 @@ Monolithic **Express + TypeScript API** + **Next.js** UI + **MongoDB Atlas**. Tw
 
 | Component | Responsibility |
 |-----------|----------------|
-| `lms-frontend` | Borrower portal + LoanDesk ops UI; JWT client; role route guards |
+| `lms-frontend` | Borrower portal + CreditSea ops UI; JWT client; role route guards |
 | `lms-backend` | Auth, BRE, loan lifecycle, payments, salary-slip I/O, RBAC |
 | MongoDB | Users, loans, payments, salary-slip **metadata** |
 | Local disk / OCI | Salary-slip **binaries** (`STORAGE_DRIVER`) |

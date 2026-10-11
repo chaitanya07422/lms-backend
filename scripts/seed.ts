@@ -20,29 +20,39 @@ interface SeedAccount {
 const SEED_PASSWORD = 'Password123!';
 
 const accounts: SeedAccount[] = [
-  { email: 'admin@lms.local', fullName: 'LMS Admin', role: 'admin', password: SEED_PASSWORD },
-  { email: 'sales@lms.local', fullName: 'Sales Executive', role: 'sales', password: SEED_PASSWORD },
   {
-    email: 'sanction@lms.local',
-    fullName: 'Sanction Executive',
+    email: 'admin@creditsea.local',
+    fullName: 'CreditSea Admin',
+    role: 'admin',
+    password: SEED_PASSWORD,
+  },
+  {
+    email: 'sales@creditsea.local',
+    fullName: 'CreditSea Sales',
+    role: 'sales',
+    password: SEED_PASSWORD,
+  },
+  {
+    email: 'sanction@creditsea.local',
+    fullName: 'CreditSea Sanction',
     role: 'sanction',
     password: SEED_PASSWORD,
   },
   {
-    email: 'disbursement@lms.local',
-    fullName: 'Disbursement Executive',
+    email: 'disbursement@creditsea.local',
+    fullName: 'CreditSea Disbursement',
     role: 'disbursement',
     password: SEED_PASSWORD,
   },
   {
-    email: 'collection@lms.local',
-    fullName: 'Collection Executive',
+    email: 'collection@creditsea.local',
+    fullName: 'CreditSea Collection',
     role: 'collection',
     password: SEED_PASSWORD,
   },
   {
-    email: 'borrower@lms.local',
-    fullName: 'Demo Borrower',
+    email: 'borrower@creditsea.local',
+    fullName: 'CreditSea Borrower',
     role: 'borrower',
     password: SEED_PASSWORD,
   },
