@@ -114,18 +114,26 @@ export async function getAppliedLoanDetail(loanId: string) {
 }
 
 export async function approveLoan(loanId: string, actorId: string): Promise<LoanDto> {
-  const loan = await Loan.findById(loanId);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
-  if (loan.status !== 'APPLIED') {
-    throw AppError.conflict(`Cannot approve loan in status ${loan.status}`);
-  }
+  const now = new Date();
+  const loan = await Loan.findOneAndUpdate(
+    { _id: loanId, status: 'APPLIED' },
+    {
+      $set: {
+        status: 'SANCTIONED',
+        sanctionedBy: new Types.ObjectId(actorId),
+        sanctionedAt: now,
+      },
+    },
+    { new: true },
+  );
 
-  loan.status = 'SANCTIONED';
-  loan.sanctionedBy = new Types.ObjectId(actorId);
-  loan.sanctionedAt = new Date();
-  await loan.save();
+  if (!loan) {
+    const existing = await Loan.findById(loanId);
+    if (!existing) {
+      throw AppError.notFound('Loan not found');
+    }
+    throw AppError.conflict(`Cannot approve loan in status ${existing.status}`);
+  }
 
   return toLoanDto(loan);
 }
@@ -135,19 +143,27 @@ export async function rejectLoan(
   actorId: string,
   reason: string,
 ): Promise<LoanDto> {
-  const loan = await Loan.findById(loanId);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
-  if (loan.status !== 'APPLIED') {
-    throw AppError.conflict(`Cannot reject loan in status ${loan.status}`);
-  }
+  const now = new Date();
+  const loan = await Loan.findOneAndUpdate(
+    { _id: loanId, status: 'APPLIED' },
+    {
+      $set: {
+        status: 'REJECTED',
+        rejectionReason: reason,
+        rejectedBy: new Types.ObjectId(actorId),
+        rejectedAt: now,
+      },
+    },
+    { new: true },
+  );
 
-  loan.status = 'REJECTED';
-  loan.rejectionReason = reason;
-  loan.rejectedBy = new Types.ObjectId(actorId);
-  loan.rejectedAt = new Date();
-  await loan.save();
+  if (!loan) {
+    const existing = await Loan.findById(loanId);
+    if (!existing) {
+      throw AppError.notFound('Loan not found');
+    }
+    throw AppError.conflict(`Cannot reject loan in status ${existing.status}`);
+  }
 
   return toLoanDto(loan);
 }

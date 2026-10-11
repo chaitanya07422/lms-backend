@@ -98,18 +98,26 @@ export async function getSanctionedLoanDetail(loanId: string): Promise<LoanDto> 
 }
 
 export async function disburseLoan(loanId: string, actorId: string): Promise<LoanDto> {
-  const loan = await Loan.findById(loanId);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
-  if (loan.status !== 'SANCTIONED') {
-    throw AppError.conflict(`Cannot disburse loan in status ${loan.status}`);
-  }
+  const now = new Date();
+  const loan = await Loan.findOneAndUpdate(
+    { _id: loanId, status: 'SANCTIONED' },
+    {
+      $set: {
+        status: 'DISBURSED',
+        disbursedBy: new Types.ObjectId(actorId),
+        disbursedAt: now,
+      },
+    },
+    { new: true },
+  );
 
-  loan.status = 'DISBURSED';
-  loan.disbursedBy = new Types.ObjectId(actorId);
-  loan.disbursedAt = new Date();
-  await loan.save();
+  if (!loan) {
+    const existing = await Loan.findById(loanId);
+    if (!existing) {
+      throw AppError.notFound('Loan not found');
+    }
+    throw AppError.conflict(`Cannot disburse loan in status ${existing.status}`);
+  }
 
   return toLoanDto(loan);
 }
