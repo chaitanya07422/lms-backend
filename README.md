@@ -115,12 +115,12 @@ Password123!
 
 | Role | Email | Access |
 |------|-------|--------|
-| Admin | `admin@lms.local` | All ops modules |
-| Sales | `sales@lms.local` | Sales only |
-| Sanction | `sanction@lms.local` | Sanction only |
-| Disbursement | `disbursement@lms.local` | Disbursement only |
-| Collection | `collection@lms.local` | Collection only |
-| Borrower | `borrower@lms.local` | Borrower portal only |
+| Admin | `admin@creditsea.local` | All ops modules |
+| Sales | `sales@creditsea.local` | Sales only |
+| Sanction | `sanction@creditsea.local` | Sanction only |
+| Disbursement | `disbursement@creditsea.local` | Disbursement only |
+| Collection | `collection@creditsea.local` | Collection only |
+| Borrower | `borrower@creditsea.local` | Borrower portal only |
 
 After local setup, run `npm run seed` once. Borrowers can also **register** a new account from the UI.
 
@@ -172,7 +172,7 @@ curl -sS http://localhost:4000/api/v1/health
 
 curl -sS -X POST http://localhost:4000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@lms.local","password":"Password123!"}'
+  -d '{"email":"admin@creditsea.local","password":"Password123!"}'
 ```
 
 Use `Authorization: Bearer <token>` on protected routes.
