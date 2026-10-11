@@ -2,8 +2,10 @@ import { z } from 'zod';
 
 import { EMPLOYMENT_MODES } from '../types/roles';
 
+import { fullNameSchema } from './name';
+
 export const profileBodySchema = z.object({
-  fullName: z.string().trim().min(2).max(100),
+  fullName: fullNameSchema,
   pan: z.string().trim().toUpperCase(),
   dateOfBirth: z.string().date(),
   monthlySalaryPaise: z.number().int().nonnegative(),

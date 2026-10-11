@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
+import { fullNameSchema } from './name';
 import { passwordSchema } from './password';
 
 export const registerBodySchema = z.object({
   email: z.string().trim().email().toLowerCase(),
   password: passwordSchema,
-  fullName: z.string().trim().min(2).max(100),
+  fullName: fullNameSchema,
 });
 
 export const loginBodySchema = z.object({
